@@ -53,13 +53,13 @@ FILE *initPPM()
   FILE *f = fopen(fileName, "wb");
   fprintf(f, "P6\n %s\n %d\n %d\n %d\n", comment, width, height, 255);
 
-  for (int i = 0; i < height; i++)
+  for (int y = 0; y < height; y++)
   {
-    for (int j = 0; j < width; j++)
+    for (int x = 0; x < width; x++)
     {
-      image[i][j][0] = 255;
-      image[i][j][1] = 255;
-      image[i][j][2] = 255;
+      image[y][x][0] = 255;
+      image[y][x][1] = 255;
+      image[y][x][2] = 255;
     }
   }
 
@@ -72,58 +72,60 @@ int genThreadId()
   return threadId;
 }
 
-bool checkCorridor(int x, int y)
+bool checkCorridor(int y, int x)
 {
-  const std::lock_guard<std::mutex> lock(mazeMutex[x][y]);
-  return maze[x][y] == 0;
+  const std::lock_guard<std::mutex> lock(mazeMutex[y][x]);
+  return maze[y][x] == 0;
 }
 
-bool writeToMaze(int x, int y, int threadId)
+bool writeToMaze(int y, int x, int threadId)
 {
-  const std::lock_guard<std::mutex> lock(mazeMutex[x][y]);
-  if (maze[x][y] != 0)
+  const std::lock_guard<std::mutex> lock(mazeMutex[y][x]);
+  if (maze[y][x] != 0)
   {
     return false;
   }
-  maze[x][y] = threadId;
+  maze[y][x] = threadId;
   return true;
 }
 
-void mazeRun(int entrance_x, int entrance_y)
+void mazeRun(int entrance_y, int entrance_x)
 {
-  int x = entrance_x;
   int y = entrance_y;
+  int x = entrance_x;
   int id = genThreadId();
   bool movable = true;
   std::vector<std::thread> children;
 
   while (movable)
   {
-    movable = writeToMaze(x, y, id);
+    movable = writeToMaze(y, x, id);
     if (!movable)
     {
       break;
     }
 
     std::vector<std::pair<int, int>> directions;
-    const int dx[] = {-1, 1, 0, 0};
-    const int dy[] = {0, 0, -1, 1};
+    // const int dx[] = {-1, 1, 0, 0};
+    // const int dy[] = {0, 0, -1, 1};
+    const int dx[] = {0, 0, -1, 1};
+    const int dy[] = {-1, 1, 0, 0};
 
     for (int i = 0; i < 4; i++)
     {
-      int newX = x + dx[i];
       int newY = y + dy[i];
+      int newX = x + dx[i];
 
-      if (newX >= 0 && newX < height && newY >= 0 && newY < width && checkCorridor(newX, newY))
+      if (newY >= 0 && newY < height && newX >= 0 && newX < width && checkCorridor(newY, newX))
       {
-        directions.emplace_back(std::make_pair(newX, newY));
+        directions.emplace_back(std::make_pair(newY, newX));
       }
     }
 
     if (directions.size() == 1)
     {
-      x = directions.at(0).first;
-      y = directions.at(0).second;
+      y = directions.at(0).first;
+      x = directions.at(0).second;
     }
     else if (directions.size() == 0)
     {
@@ -132,14 +134,14 @@ void mazeRun(int entrance_x, int entrance_y)
     else
     {
       crossRoadCount++;
-      x = directions.at(0).first;
-      y = directions.at(0).second;
+      y = directions.at(0).first;
+      x = directions.at(0).second;
       for (int i = 1; i < directions.size(); i++)
       {
-        int child_x = directions.at(i).first;
-        int child_y = directions.at(i).second;
+        int child_y = directions.at(i).first;
+        int child_x = directions.at(i).second;
         childrenCount++;
-        children.emplace_back(std::thread(mazeRun, child_x, child_y));
+        children.emplace_back(std::thread(mazeRun, child_y, child_x));
       }
     }
   }
@@ -152,20 +154,20 @@ void mazeRun(int entrance_x, int entrance_y)
 
 void finalizePPM(FILE *ppm)
 {
-  for (int i = 0; i < height; i++)
+  for (int y = 0; y < height; y++)
   {
-    for (int j = 0; j < width; j++)
+    for (int x = 0; x < width; x++)
     {
-      if (maze[i][j] == 1)
+      if (maze[y][x] == 1)
       {
         continue;
       }
-      int red = 50 * maze[i][j];
-      int green = 25 * maze[i][j];
-      int blue = 1 * maze[i][j];
-      image[i][j][0] = (char)red;
-      image[i][j][1] = (char)green;
-      image[i][j][2] = (char)blue;
+      int red = 50 * maze[y][x];
+      int green = 25 * maze[y][x];
+      int blue = 1 * maze[y][x];
+      image[y][x][0] = (char)red;
+      image[y][x][1] = (char)green;
+      image[y][x][2] = (char)blue;
     }
   }
   fwrite(image, 1, 3 * height * width, ppm);
@@ -173,11 +175,11 @@ void finalizePPM(FILE *ppm)
 
 void printMaze()
 {
-  for (int i = 0; i < height; i++)
+  for (int y = 0; y < height; ++y)
   {
-    for (int j = 0; j < width; j++)
+    for (int x = 0; x < width; ++x)
     {
-      printf("%d ", maze[i][j]);
+      printf("%d ", maze[y][x]);
     }
     printf("\n");
   }
@@ -186,11 +188,11 @@ void printMaze()
 void corridorStats()
 {
   std::unordered_map<int, int> occurrences;
-  for (int i = 0; i < height; ++i)
+  for (int y = 0; y < height; ++y)
   {
-    for (int j = 0; j < width; ++j)
+    for (int x = 0; x < width; ++x)
     {
-      int value = maze[i][j];
+      int value = maze[y][x];
       if (value != 1)
       {
         occurrences[value]++;
